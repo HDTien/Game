@@ -15,6 +15,7 @@
       <div class="card">
         <h1>Đấu Súng <span>1vs1</span></h1>
         <p class="muted">Bắn súng top-down · Thắng 3 round để thắng trận</p>
+        <div id="profile-bar" class="profile"></div>
 
         <label>Tên của bạn
           <input id="name" maxlength="20" autocomplete="off" />
@@ -46,12 +47,14 @@
         <div id="controls" class="controls"></div>
 
         <div class="row settings">
-          <label class="inline">Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="inline">🔊 Hiệu ứng <input id="volume" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="inline">🎵 Nhạc <input id="music" type="range" min="0" max="1" step="0.05" /></label>
           <label class="inline"><input id="shake" type="checkbox" /> Rung màn hình</label>
         </div>
 
         <div class="buttons">
           <button id="btn-start" class="primary">Bắt đầu</button>
+          <button id="btn-armory">Kho vũ khí</button>
           <button id="btn-history">Lịch sử &amp; thống kê</button>
         </div>
         <p class="hint mobile-only">Game cần bàn phím (và chuột) — hãy chơi trên máy tính.</p>
@@ -81,6 +84,23 @@
       </div>
     </section>
 
+    <!-- KHO VŨ KHÍ -->
+    <section id="armory" class="screen hidden">
+      <div class="card wide">
+        <div class="armory-head">
+          <h2>Kho vũ khí</h2>
+          <div id="armory-profile" class="profile"></div>
+        </div>
+        <p class="muted">Đấu với Bot để kiếm <b>xu</b> và <b>kinh nghiệm</b>. Nâng cấp súng cần đủ xu và đạt điều kiện; súng mới mở khóa bằng thành tích.</p>
+        <div id="weapon-list" class="weapon-grid"></div>
+        <h3>Thành tựu</h3>
+        <div id="achievement-list" class="ach-grid"></div>
+        <div class="buttons">
+          <button id="btn-armory-back" class="primary">Quay lại</button>
+        </div>
+      </div>
+    </section>
+
     <!-- KẾT QUẢ -->
     <section id="result" class="screen hidden overlay">
       <div class="card">
@@ -90,6 +110,7 @@
           <thead><tr><th></th><th id="result-p0"></th><th id="result-p1"></th></tr></thead>
           <tbody id="result-body"></tbody>
         </table>
+        <div id="result-rewards" class="rewards"></div>
         <div class="buttons">
           <button id="btn-rematch" class="primary">Chơi lại</button>
           <button id="btn-result-menu">Về menu</button>
@@ -107,6 +128,8 @@
         </div>
       </div>
     </section>
+
+    <div id="mute" class="mute hidden">🔇 Đã tắt tiếng — nhấn M để bật</div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

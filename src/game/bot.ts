@@ -1,6 +1,7 @@
 import { TICK, PLAYER_R } from './constants';
 import { angleDiff, clamp, lineOfSight, segmentRect } from './collision';
 import { NavGrid } from './nav';
+import { MAX_ARMOR } from './pickups';
 import { NO_INPUT, type PlayerInput, type Player, type Side, type World } from './world';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -25,6 +26,7 @@ export class Bot {
   private nav: NavGrid | null = null;
   private field: Int32Array | null = null;
   private fieldT = 0;
+  private fieldKey = '';
 
   constructor(public readonly id: Side, public readonly difficulty: Difficulty) {}
 
@@ -54,8 +56,8 @@ export class Bot {
 
     // Chọn súng theo khoảng cách
     this.switchCd -= dt;
-    const want = dist < 230 ? 2 : dist < 520 ? 1 : 0;
-    if (want !== me.weapon && this.switchCd <= 0 && me.fireCd <= 0.05) {
+    const want = me.weapons.findIndex((w) => w.id === (dist < 230 ? 'shotgun' : dist < 520 ? 'smg' : 'pistol'));
+    if (want >= 0 && want !== me.weapon && this.switchCd <= 0 && me.fireCd <= 0.05) {
       inp.weapon = want;
       this.switchCd = 1.5;
     }
@@ -82,17 +84,21 @@ export class Bot {
         this.strafeT -= dt;
         if (this.strafeT <= 0) { this.strafe *= -1; this.strafeT = 0.5 + Math.random(); }
         const toE = Math.atan2(dy, dx);
-        const prefer = me.weapon === 2 ? 140 : me.weapon === 1 ? 320 : 480;
+        const prefer = me.def.id === 'shotgun' ? 140 : me.def.id === 'smg' ? 320 : 480;
         let radial = dist > prefer + 60 ? 1 : dist < prefer - 60 ? -1 : 0;
         if (me.reloading) radial = -1;
         const mvx = Math.cos(toE + Math.PI / 2) * this.strafe + Math.cos(toE) * radial * 0.8;
         const mvy = Math.sin(toE + Math.PI / 2) * this.strafe + Math.sin(toE) * radial * 0.8;
         angle = this.steer(me, Math.atan2(mvy, mvx), world);
       } else {
+        // Không thấy đối thủ: ưu tiên nhặt vật phẩm hữu ích ở gần, nếu không thì đi tìm đối thủ
+        const goal = this.pickGoal(me, world) ?? en;
+        const key = `${Math.round(goal.x)},${Math.round(goal.y)}`;
         this.fieldT -= dt;
-        if (!this.field || this.fieldT <= 0) {
-          this.field = nav.field(en.x, en.y);
+        if (!this.field || this.fieldT <= 0 || key !== this.fieldKey) {
+          this.field = nav.field(goal.x, goal.y);
           this.fieldT = 0.3;
+          this.fieldKey = key;
         }
         angle = nav.direction(this.field, me.x, me.y);
       }
@@ -100,6 +106,19 @@ export class Bot {
       if (los && me.dashCd <= 0 && Math.random() < P.dashChance) inp.dash = true;
     }
     return inp;
+  }
+
+  private pickGoal(me: Player, world: World): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null, bestD = 450;
+    for (const k of world.pickups) {
+      const useful =
+        k.kind === 'health' ? me.hp < 80 :
+        k.kind === 'armor' ? me.armor < MAX_ARMOR :
+        k.kind === 'ammo' ? me.ammo[me.weapon] < me.def.mag : true;
+      const d = Math.hypot(k.x - me.x, k.y - me.y);
+      if (useful && d < bestD) { bestD = d; best = k; }
+    }
+    return best;
   }
 
   /** Thử lệch hướng nếu phía trước có tường; đổi hướng né khi bị chặn. */

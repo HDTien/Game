@@ -46,9 +46,7 @@ export class Keyboard {
 /** Chế độ đấu Bot: WASD + chuột. */
 export function mouseInput(kb: Keyboard, me: Player): PlayerInput {
   let weapon: number | null = null;
-  if (kb.wasPressed('Digit1')) weapon = 0;
-  if (kb.wasPressed('Digit2')) weapon = 1;
-  if (kb.wasPressed('Digit3')) weapon = 2;
+  for (let i = 0; i < 5; i++) if (kb.wasPressed(`Digit${i + 1}`)) weapon = i;
   return {
     mx: kb.axis('KeyA', 'KeyD'),
     my: kb.axis('KeyW', 'KeyS'),

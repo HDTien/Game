@@ -1,4 +1,5 @@
 import type { Difficulty } from './game/bot';
+import { defaultProgress, normalizeProgress, type Progress } from './progression';
 
 /**
  * Lưu dữ liệu trên trình duyệt (localStorage).
@@ -31,7 +32,8 @@ export interface Settings {
   difficulty: Difficulty;
   mapId: string;
   p2Name: string;
-  volume: number; // 0..1
+  volume: number; // hiệu ứng 0..1
+  musicVolume: number; // nhạc 0..1
   screenShake: boolean;
 }
 
@@ -46,6 +48,7 @@ export interface SaveData {
   settings: Settings;
   stats: Totals;
   history: MatchRecord[];
+  progress: Progress;
 }
 
 export interface DataStore {
@@ -64,9 +67,10 @@ export function defaults(): SaveData {
   return {
     version: 1,
     profile: { name: 'Người chơi 1' },
-    settings: { mode: 'bot', difficulty: 'normal', mapId: 'warehouse', p2Name: 'Người chơi 2', volume: 0.5, screenShake: true },
+    settings: { mode: 'bot', difficulty: 'normal', mapId: 'warehouse', p2Name: 'Người chơi 2', volume: 0.5, musicVolume: 0.35, screenShake: true },
     stats: { matches: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, shots: 0, hits: 0, damage: 0 },
     history: [],
+    progress: defaultProgress(),
   };
 }
 
@@ -80,6 +84,7 @@ function normalize(raw: unknown): SaveData {
     settings: { ...d.settings, ...r.settings },
     stats: { ...d.stats, ...r.stats },
     history: Array.isArray(r.history) ? r.history.slice(0, MAX_HISTORY) : [],
+    progress: normalizeProgress(r.progress),
   };
 }
 
@@ -121,6 +126,7 @@ export class LocalStore implements DataStore {
     const fresh = defaults();
     fresh.profile = data.profile;
     fresh.settings = data.settings;
+    fresh.progress = data.progress; // giữ cấp độ, xu, súng
     this.save(fresh);
     return fresh;
   }

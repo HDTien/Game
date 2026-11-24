@@ -1,5 +1,5 @@
 import { W, H, PLAYER_R, MAX_HP, DASH_CD } from './game/constants';
-import { WEAPONS } from './game/weapons';
+import { PICKUPS, PICKUP_R, MAX_ARMOR, BOOST_TIME } from './game/pickups';
 import type { GameEvent, Player, World } from './game/world';
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
@@ -48,8 +48,8 @@ export class Renderer {
           if (e.weapon === 'shotgun') this.shake = Math.max(this.shake, 5);
           break;
         case 'hit':
-          this.burst(e.x, e.y, 7, '#ff4d6d', 220, e.angle, 1.2);
-          this.floaters.push({ x: e.x, y: e.y - 10, text: String(e.damage), life: 0.7, color: '#ffe1e8' });
+          this.burst(e.x, e.y, 7, e.armor ? '#4895ef' : '#ff4d6d', 220, e.angle, 1.2);
+          this.floaters.push({ x: e.x, y: e.y - 10, text: String(e.damage), life: 0.7, color: e.armor ? '#b8d4ff' : '#ffe1e8' });
           this.shake = Math.max(this.shake, 3);
           break;
         case 'kill':
@@ -62,6 +62,15 @@ export class Renderer {
         case 'dash':
           this.burst(e.x, e.y, 10, world.players[e.owner].color, 120);
           break;
+        case 'pickupSpawn':
+          this.burst(e.x, e.y, 12, PICKUPS[e.kind].color, 140);
+          break;
+        case 'pickup': {
+          const info = PICKUPS[e.kind];
+          this.burst(e.x, e.y, 16, info.color, 200);
+          this.floaters.push({ x: e.x, y: e.y - 20, text: info.label, life: 1.1, color: info.color });
+          break;
+        }
         case 'countdown':
           this.show(String(e.n), `Round ${world.round}`, '#fff', 0.9);
           break;
@@ -107,6 +116,7 @@ export class Renderer {
     }
     this.drawFloor();
     this.drawWalls(world);
+    this.drawPickups(world);
     this.drawBullets(world);
     for (const p of world.players) this.drawPlayer(p, world);
     this.drawParticles();
@@ -140,6 +150,26 @@ export class Renderer {
     }
   }
 
+  private drawPickups(world: World) {
+    const c = this.ctx;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (const k of world.pickups) {
+      const info = PICKUPS[k.kind];
+      const pop = Math.min(1, k.age / 0.25);
+      const r = PICKUP_R * pop * (1 + Math.sin(k.age * 5) * 0.08);
+      c.globalAlpha = 0.25;
+      c.fillStyle = info.color;
+      c.beginPath(); c.arc(k.x, k.y, r + 7, 0, Math.PI * 2); c.fill();
+      c.globalAlpha = 1;
+      c.beginPath(); c.arc(k.x, k.y, r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#10131a';
+      c.font = `900 ${Math.round(15 * pop)}px ${FONT}`;
+      c.fillText(info.symbol, k.x, k.y + 1);
+    }
+    c.textBaseline = 'alphabetic';
+  }
+
   private drawBullets(world: World) {
     const c = this.ctx;
     c.lineCap = 'round';
@@ -171,6 +201,16 @@ export class Renderer {
     c.fillRect(PLAYER_R - 6, -thick / 2, len, thick);
     c.restore();
 
+    // Hào quang buff
+    if (p.alive && (p.damageBoostT > 0 || p.speedBoostT > 0)) {
+      const col = p.damageBoostT > 0 ? PICKUPS.damage.color : PICKUPS.speed.color;
+      c.strokeStyle = col;
+      c.lineWidth = 2;
+      c.globalAlpha = 0.5 + Math.sin(world.elapsed * 12) * 0.3;
+      c.beginPath(); c.arc(p.x, p.y, PLAYER_R + 4, 0, Math.PI * 2); c.stroke();
+      c.globalAlpha = 1;
+    }
+
     // Thân
     c.fillStyle = p.hitFlash > 0 ? '#ffffff' : p.color;
     c.beginPath(); c.arc(p.x, p.y, PLAYER_R, 0, Math.PI * 2); c.fill();
@@ -201,6 +241,10 @@ export class Renderer {
       c.fillRect(p.x - 20, p.y - PLAYER_R - 11, 40, 5);
       c.fillStyle = p.hp > 30 ? '#06d6a0' : '#ef476f';
       c.fillRect(p.x - 20, p.y - PLAYER_R - 11, (40 * p.hp) / MAX_HP, 5);
+      if (p.armor > 0) {
+        c.fillStyle = PICKUPS.armor.color;
+        c.fillRect(p.x - 20, p.y - PLAYER_R - 6, (40 * p.armor) / MAX_ARMOR, 2);
+      }
     }
     c.restore();
   }
@@ -257,11 +301,26 @@ export class Renderer {
 
     c.font = `700 13px ${FONT}`;
     c.textAlign = 'left'; c.fillStyle = p.color; c.fillText(truncate(p.name, 20), x + 12, y + 15);
-    c.textAlign = 'right'; c.fillStyle = '#fff'; c.fillText(`${Math.ceil(p.hp)} HP`, x + 252, y + 15);
+    c.textAlign = 'right'; c.fillStyle = '#fff';
+    c.fillText(`${Math.ceil(p.hp)} HP${p.armor > 0 ? ` · ${Math.ceil(p.armor)} giáp` : ''}`, x + 252, y + 15);
 
-    // Máu
+    // Máu + giáp
     c.fillStyle = '#2a3142'; c.fillRect(x + 12, y + 26, 240, 10);
     c.fillStyle = p.hp > 30 ? '#06d6a0' : '#ef476f'; c.fillRect(x + 12, y + 26, (240 * p.hp) / MAX_HP, 10);
+    if (p.armor > 0) { c.fillStyle = PICKUPS.armor.color; c.fillRect(x + 12, y + 32, (240 * p.armor) / MAX_ARMOR, 4); }
+
+    // Buff đang có (hiện phía trên bảng)
+    const buffs: [string, number, string][] = [];
+    if (p.damageBoostT > 0) buffs.push(['Sát thương x1.5', p.damageBoostT, PICKUPS.damage.color]);
+    if (p.speedBoostT > 0) buffs.push(['Tốc độ', p.speedBoostT, PICKUPS.speed.color]);
+    buffs.forEach(([label, t, col], i) => {
+      const bx = x + i * 132, by = y - 24;
+      c.fillStyle = 'rgba(10,12,18,0.72)';
+      c.beginPath(); c.roundRect(bx, by, 126, 18, 6); c.fill();
+      c.fillStyle = col; c.fillRect(bx + 4, by + 14, 118 * (t / BOOST_TIME), 2);
+      c.font = `700 11px ${FONT}`; c.textAlign = 'left';
+      c.fillText(`${label} ${t.toFixed(1)}s`, bx + 6, by + 10);
+    });
     // Lướt
     const ready = 1 - p.dashCd / DASH_CD;
     c.fillStyle = '#2a3142'; c.fillRect(x + 12, y + 39, 240, 3);
@@ -270,13 +329,20 @@ export class Renderer {
     // Súng + đạn
     c.font = `600 12px ${FONT}`;
     c.textAlign = 'left';
-    let cx = x + 12;
-    WEAPONS.forEach((w, i) => {
-      const label = `${i + 1} ${w.name}`;
-      c.fillStyle = i === p.weapon ? '#ffffff' : '#5d6577';
-      c.fillText(label, cx, y + 58);
-      cx += c.measureText(label).width + 12;
+    // Các ô số súng, ô đang cầm sáng lên
+    p.weapons.forEach((_, i) => {
+      c.fillStyle = i === p.weapon ? '#ffffff' : '#3a4256';
+      c.fillRect(x + 12 + i * 9, y + 50, 6, 6);
     });
+    const def = p.def;
+    c.fillStyle = '#fff';
+    c.font = `700 13px ${FONT}`;
+    const nx = x + 12 + p.weapons.length * 9 + 6;
+    c.fillText(def.name, nx, y + 58);
+    const nameW = c.measureText(def.name).width;
+    c.fillStyle = '#ffd166';
+    c.font = `600 11px ${FONT}`;
+    c.fillText('★'.repeat(def.level), nx + nameW + 6, y + 57);
     c.textAlign = 'right';
     c.font = `700 13px ${FONT}`;
     c.fillStyle = p.reloading ? '#ffd166' : p.ammo[p.weapon] === 0 ? '#ef476f' : '#fff';

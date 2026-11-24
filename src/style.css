@@ -154,3 +154,54 @@ td.draw { color: var(--muted); font-weight: 700; }
 .hint { font-size: 13px; color: var(--accent); }
 .mobile-only { display: none; }
 @media (hover: none) and (pointer: coarse) { .mobile-only { display: block; } }
+
+/* ---------- Hồ sơ / tiến trình ---------- */
+.profile { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 14px; margin-bottom: 18px; }
+.profile .lvl { font-weight: 800; color: var(--accent); }
+.profile .coins { font-weight: 800; color: #ffd166; }
+.xpbar { width: 140px; height: 6px; background: #2a3142; border-radius: 3px; overflow: hidden; }
+.xpbar > i { display: block; height: 100%; background: var(--p1); }
+.profile .xptext { font-size: 12px; color: var(--muted); }
+
+.armory-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.armory-head h2, .armory-head .profile { margin: 0; }
+h3 { margin: 22px 0 10px; }
+
+.weapon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.weapon-card { background: #0f1219; border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.weapon-card.locked { opacity: 0.75; }
+.weapon-card .title { display: flex; justify-content: space-between; align-items: baseline; }
+.weapon-card .name { font-size: 18px; font-weight: 800; }
+.stars { color: #ffd166; letter-spacing: 1px; }
+.stars .off { color: #3a4256; }
+.wstats { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13px; }
+.wstats .k { color: var(--muted); }
+.wstats .up { color: #06d6a0; font-weight: 700; }
+.next { font-size: 13px; border-top: 1px solid var(--line); padding-top: 8px; }
+.next .desc { color: var(--text); margin-bottom: 4px; }
+.req { font-size: 12px; color: var(--muted); }
+.req.ok { color: #06d6a0; }
+.req.no { color: var(--danger); }
+.weapon-card button { margin-top: auto; }
+button:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.progressbar { height: 6px; background: #2a3142; border-radius: 3px; overflow: hidden; }
+.progressbar > i { display: block; height: 100%; background: var(--accent); }
+
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.ach { background: #0f1219; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; opacity: 0.55; }
+.ach.done { opacity: 1; border-color: #4a3f1c; }
+.ach .n { font-weight: 700; }
+.ach .d { color: var(--muted); font-size: 12px; }
+.ach .r { color: #ffd166; font-size: 12px; font-weight: 700; }
+
+.rewards { background: #0f1219; border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 14px; font-size: 14px; line-height: 1.8; }
+.rewards .big { font-size: 18px; font-weight: 800; color: #ffd166; }
+.rewards .lvup { color: var(--p1); font-weight: 800; }
+.rewards .unlock { color: #06d6a0; font-weight: 800; }
+.rewards .ach-line { color: #ffd166; }
+
+.mute {
+  position: fixed; top: 12px; right: 12px; z-index: 10;
+  background: rgba(10, 12, 18, 0.85); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 12px; font-size: 13px; color: var(--muted); pointer-events: none;
+}
