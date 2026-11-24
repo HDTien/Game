@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Đấu Súng 1vs1</title>
+  </head>
+  <body>
+    <div id="stage" class="hidden">
+      <canvas id="game"></canvas>
+    </div>
+
+    <!-- MENU -->
+    <section id="menu" class="screen">
+      <div class="card">
+        <h1>Đấu Súng <span>1vs1</span></h1>
+        <p class="muted">Bắn súng top-down · Thắng 3 round để thắng trận</p>
+
+        <label>Tên của bạn
+          <input id="name" maxlength="20" autocomplete="off" />
+        </label>
+
+        <div class="row">
+          <label>Chế độ
+            <select id="mode">
+              <option value="bot">Đấu với Bot</option>
+              <option value="local">2 người · 1 máy</option>
+            </select>
+          </label>
+          <label id="difficulty-wrap">Độ khó
+            <select id="difficulty">
+              <option value="easy">Dễ</option>
+              <option value="normal">Thường</option>
+              <option value="hard">Khó</option>
+            </select>
+          </label>
+          <label id="p2name-wrap">Tên người chơi 2
+            <input id="p2name" maxlength="20" autocomplete="off" />
+          </label>
+        </div>
+
+        <label>Bản đồ
+          <select id="map"></select>
+        </label>
+
+        <div id="controls" class="controls"></div>
+
+        <div class="row settings">
+          <label class="inline">Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="inline"><input id="shake" type="checkbox" /> Rung màn hình</label>
+        </div>
+
+        <div class="buttons">
+          <button id="btn-start" class="primary">Bắt đầu</button>
+          <button id="btn-history">Lịch sử &amp; thống kê</button>
+        </div>
+        <p class="hint mobile-only">Game cần bàn phím (và chuột) — hãy chơi trên máy tính.</p>
+      </div>
+    </section>
+
+    <!-- LỊCH SỬ -->
+    <section id="history" class="screen hidden">
+      <div class="card wide">
+        <h2>Lịch sử &amp; thống kê</h2>
+        <div id="stats-summary" class="stats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Thời gian</th><th>Chế độ</th><th>Đối thủ</th><th>Bản đồ</th><th>Tỉ số</th><th>Kết quả</th><th>K/D</th><th>Chính xác</th></tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+        <div class="buttons">
+          <button id="btn-history-back" class="primary">Quay lại</button>
+          <button id="btn-export">Xuất dữ liệu</button>
+          <button id="btn-import">Nhập dữ liệu</button>
+          <button id="btn-clear" class="danger">Xóa lịch sử</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+    </section>
+
+    <!-- KẾT QUẢ -->
+    <section id="result" class="screen hidden overlay">
+      <div class="card">
+        <h2 id="result-title"></h2>
+        <p id="result-score" class="score"></p>
+        <table>
+          <thead><tr><th></th><th id="result-p0"></th><th id="result-p1"></th></tr></thead>
+          <tbody id="result-body"></tbody>
+        </table>
+        <div class="buttons">
+          <button id="btn-rematch" class="primary">Chơi lại</button>
+          <button id="btn-result-menu">Về menu</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TẠM DỪNG -->
+    <section id="pause" class="screen hidden overlay">
+      <div class="card narrow">
+        <h2>Tạm dừng</h2>
+        <div class="buttons column">
+          <button id="btn-resume" class="primary">Tiếp tục (Esc)</button>
+          <button id="btn-quit">Bỏ trận, về menu</button>
+        </div>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
