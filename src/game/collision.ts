@@ -36,6 +36,12 @@ export function resolveCircleRect(p: { x: number; y: number }, r: number, w: Rec
 
 /** Liang–Barsky: tham số t∈[0,1] nơi đoạn thẳng chạm hình chữ nhật, hoặc null. */
 export function segmentRect(x1: number, y1: number, x2: number, y2: number, w: Rect): number | null {
+  const r = segmentRectRange(x1, y1, x2, y2, w);
+  return r ? r[0] : null;
+}
+
+/** Khoảng [t vào, t ra] của đoạn thẳng trong hình chữ nhật, hoặc null. */
+export function segmentRectRange(x1: number, y1: number, x2: number, y2: number, w: Rect): [number, number] | null {
   const dx = x2 - x1, dy = y2 - y1;
   const p = [-dx, dx, -dy, dy];
   const q = [x1 - w.x, w.x + w.w - x1, y1 - w.y, w.y + w.h - y1];
@@ -54,7 +60,7 @@ export function segmentRect(x1: number, y1: number, x2: number, y2: number, w: R
       }
     }
   }
-  return t0;
+  return [t0, t1];
 }
 
 /** Tham số t∈[0,1] nơi đoạn thẳng chạm hình tròn, hoặc null. */

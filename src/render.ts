@@ -1,19 +1,32 @@
-import { W, H, PLAYER_R, MAX_HP, DASH_CD } from './game/constants';
+import { W, H, PLAYER_R, MAX_HP, DASH_CD, TEAM_NAMES, TEAM_COLORS } from './game/constants';
 import { PICKUPS, PICKUP_R, MAX_ARMOR, BOOST_TIME } from './game/pickups';
-import type { GameEvent, Player, World } from './game/world';
+import { BASE_WEAPONS } from './game/weapons';
+import type { GameEvent, Player, WorldView } from './game/world';
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
 interface Floater { x: number; y: number; text: string; life: number; color: string }
 interface Banner { text: string; sub: string; t: number; max: number; color: string }
+interface KillFeed { killer: string; killerColor: string; victim: string; victimColor: string; weapon: string; t: number }
+
+export interface DrawOptions {
+  crosshair: { x: number; y: number } | null;
+  /** Người chơi điều khiển trên máy này (hiện bảng thông tin lớn ở dưới). */
+  focus: number[];
+  /** Đánh dấu "bạn" trên bản đồ (online / đấu bot). */
+  me: number | null;
+}
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const BULLET_COLORS = ['#bdf0ff', '#ffc2dd'];
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private particles: Particle[] = [];
   private floaters: Floater[] = [];
+  private feed: KillFeed[] = [];
   private shake = 0;
   private banner: Banner | null = null;
+  private time = 0;
   screenShake = true;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -23,6 +36,7 @@ export class Renderer {
   reset() {
     this.particles = [];
     this.floaters = [];
+    this.feed = [];
     this.shake = 0;
     this.banner = null;
   }
@@ -40,27 +54,42 @@ export class Renderer {
     this.banner = { text, sub, t: dur, max: dur, color };
   }
 
-  onEvents(events: GameEvent[], world: World) {
+  /** Tên hiển thị của đội/người thắng: 1vs1 dùng tên người, còn lại dùng tên đội. */
+  private winnerLabel(view: WorldView, team: 0 | 1): { text: string; color: string } {
+    const members = view.players.filter((p) => p.team === team);
+    if (members.length === 1) return { text: members[0].name, color: members[0].color };
+    return { text: TEAM_NAMES[team], color: TEAM_COLORS[team][0] };
+  }
+
+  onEvents(events: GameEvent[], view: WorldView) {
     for (const e of events) {
       switch (e.type) {
-        case 'shoot':
-          this.burst(e.x, e.y, e.weapon === 'shotgun' ? 10 : 4, '#ffd166', 260, e.angle, 0.6, 2.5);
-          if (e.weapon === 'shotgun') this.shake = Math.max(this.shake, 5);
+        case 'shoot': {
+          if (e.mod === 'silencer') { this.burst(e.x, e.y, 1, '#888', 80, e.angle, 0.4, 2); break; }
+          const big = e.weapon === 'shotgun' || e.weapon === 'sniper';
+          this.burst(e.x, e.y, big ? 10 : 4, '#ffd166', 260, e.angle, 0.6, 2.5);
+          if (big && view.players[e.owner]) this.shake = Math.max(this.shake, 4);
           break;
+        }
         case 'hit':
           this.burst(e.x, e.y, 7, e.armor ? '#4895ef' : '#ff4d6d', 220, e.angle, 1.2);
           this.floaters.push({ x: e.x, y: e.y - 10, text: String(e.damage), life: 0.7, color: e.armor ? '#b8d4ff' : '#ffe1e8' });
           this.shake = Math.max(this.shake, 3);
           break;
-        case 'kill':
-          this.burst(e.x, e.y, 30, world.players[e.victim].color, 380, undefined, undefined, 4);
+        case 'kill': {
+          const k = view.players[e.killer], v = view.players[e.victim];
+          if (!k || !v) break;
+          this.burst(e.x, e.y, 30, v.color, 380, undefined, undefined, 4);
           this.shake = Math.max(this.shake, 10);
+          this.feed.unshift({ killer: k.name, killerColor: k.color, victim: v.name, victimColor: v.color, weapon: BASE_WEAPONS[e.weapon].name, t: 5 });
+          this.feed.length = Math.min(this.feed.length, 5);
           break;
+        }
         case 'spark':
           this.burst(e.x, e.y, 4, '#aab4c8', 160);
           break;
         case 'dash':
-          this.burst(e.x, e.y, 10, world.players[e.owner].color, 120);
+          if (view.players[e.owner]) this.burst(e.x, e.y, 10, view.players[e.owner].color, 120);
           break;
         case 'pickupSpawn':
           this.burst(e.x, e.y, 12, PICKUPS[e.kind].color, 140);
@@ -72,7 +101,7 @@ export class Renderer {
           break;
         }
         case 'countdown':
-          this.show(String(e.n), `Round ${world.round}`, '#fff', 0.9);
+          this.show(String(e.n), `Round ${view.round}`, '#fff', 0.9);
           break;
         case 'go':
           this.show('BẮN!', '', '#ffd166', 0.7);
@@ -80,18 +109,19 @@ export class Renderer {
         case 'roundEnd': {
           const sub = e.reason === 'time' ? 'Hết giờ' : '';
           if (e.winner === null) this.show('Hòa round', sub, '#ddd', 2.3);
-          else { const p = world.players[e.winner]; this.show(`${p.name} thắng round`, sub, p.color, 2.3); }
+          else { const w = this.winnerLabel(view, e.winner); this.show(`${w.text} thắng round`, sub, w.color, 2.3); }
           break;
         }
         case 'matchEnd':
           if (e.winner === null) this.show('HÒA', '', '#ddd', 3);
-          else { const p = world.players[e.winner]; this.show(`${p.name} THẮNG!`, '', p.color, 3); }
+          else { const w = this.winnerLabel(view, e.winner); this.show(`${w.text} THẮNG!`, '', w.color, 3); }
           break;
       }
     }
   }
 
   update(dt: number) {
+    this.time += dt;
     for (const p of this.particles) {
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.9; p.vy *= 0.9;
@@ -100,11 +130,13 @@ export class Renderer {
     this.particles = this.particles.filter((p) => p.life > 0);
     for (const f of this.floaters) { f.y -= 40 * dt; f.life -= dt; }
     this.floaters = this.floaters.filter((f) => f.life > 0);
+    for (const k of this.feed) k.t -= dt;
+    this.feed = this.feed.filter((k) => k.t > 0);
     this.shake = Math.max(0, this.shake - 40 * dt);
     if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
   }
 
-  draw(world: World, crosshair: { x: number; y: number } | null) {
+  draw(view: WorldView, opt: DrawOptions) {
     const c = this.ctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.fillStyle = '#151922';
@@ -115,16 +147,17 @@ export class Renderer {
       c.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     }
     this.drawFloor();
-    this.drawWalls(world);
-    this.drawPickups(world);
-    this.drawBullets(world);
-    for (const p of world.players) this.drawPlayer(p, world);
+    this.drawWalls(view);
+    this.drawPickups(view);
+    this.drawBullets(view);
+    for (const p of view.players) if (!p.alive) this.drawPlayer(p, view, opt.me);
+    for (const p of view.players) if (p.alive) this.drawPlayer(p, view, opt.me);
     this.drawParticles();
     c.restore();
 
-    this.drawHud(world);
+    this.drawHud(view, opt);
     this.drawBanner();
-    if (crosshair) this.drawCrosshair(crosshair.x, crosshair.y);
+    if (opt.crosshair) this.drawCrosshair(opt.crosshair.x, opt.crosshair.y);
   }
 
   private drawFloor() {
@@ -137,9 +170,9 @@ export class Renderer {
     c.stroke();
   }
 
-  private drawWalls(world: World) {
+  private drawWalls(view: WorldView) {
     const c = this.ctx;
-    for (const w of world.map.walls) {
+    for (const w of view.map.walls) {
       c.fillStyle = '#2a3142';
       c.fillRect(w.x, w.y, w.w, w.h);
       c.fillStyle = '#353e54';
@@ -150,11 +183,11 @@ export class Renderer {
     }
   }
 
-  private drawPickups(world: World) {
+  private drawPickups(view: WorldView) {
     const c = this.ctx;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    for (const k of world.pickups) {
+    for (const k of view.pickups) {
       const info = PICKUPS[k.kind];
       const pop = Math.min(1, k.age / 0.25);
       const r = PICKUP_R * pop * (1 + Math.sin(k.age * 5) * 0.08);
@@ -164,26 +197,29 @@ export class Renderer {
       c.globalAlpha = 1;
       c.beginPath(); c.arc(k.x, k.y, r, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#10131a';
-      c.font = `900 ${Math.round(15 * pop)}px ${FONT}`;
+      c.font = `900 ${Math.max(1, Math.round(15 * pop))}px ${FONT}`;
       c.fillText(info.symbol, k.x, k.y + 1);
     }
     c.textBaseline = 'alphabetic';
   }
 
-  private drawBullets(world: World) {
+  private drawBullets(view: WorldView) {
     const c = this.ctx;
     c.lineCap = 'round';
-    for (const b of world.bullets) {
-      c.strokeStyle = b.owner === 0 ? '#bdf0ff' : '#ffc2dd';
-      c.lineWidth = 3;
+    for (const b of view.bullets) {
+      c.strokeStyle = BULLET_COLORS[b.team];
+      c.globalAlpha = b.tracer === 'faint' ? 0.22 : 1;
+      c.lineWidth = b.tracer === 'heavy' ? 4.5 : b.tracer === 'faint' ? 1.5 : 3;
+      const len = b.tracer === 'heavy' ? 0.03 : 0.018;
       c.beginPath();
-      c.moveTo(b.x - b.vx * 0.018, b.y - b.vy * 0.018);
+      c.moveTo(b.x - b.vx * len, b.y - b.vy * len);
       c.lineTo(b.x, b.y);
       c.stroke();
     }
+    c.globalAlpha = 1;
   }
 
-  private drawPlayer(p: Player, world: World) {
+  private drawPlayer(p: Player, view: WorldView, me: number | null) {
     const c = this.ctx;
     c.save();
     c.globalAlpha = p.alive ? 1 : 0.25;
@@ -199,6 +235,7 @@ export class Renderer {
     c.fillStyle = '#c9d1e0';
     const len = p.def.gunLength, thick = p.def.id === 'shotgun' ? 8 : 6;
     c.fillRect(PLAYER_R - 6, -thick / 2, len, thick);
+    if (p.def.modId === 'akimbo') c.fillRect(PLAYER_R - 8, -thick / 2 - 8, len - 4, thick - 1);
     c.restore();
 
     // Hào quang buff
@@ -206,7 +243,7 @@ export class Renderer {
       const col = p.damageBoostT > 0 ? PICKUPS.damage.color : PICKUPS.speed.color;
       c.strokeStyle = col;
       c.lineWidth = 2;
-      c.globalAlpha = 0.5 + Math.sin(world.elapsed * 12) * 0.3;
+      c.globalAlpha = 0.5 + Math.sin(this.time * 12) * 0.3;
       c.beginPath(); c.arc(p.x, p.y, PLAYER_R + 4, 0, Math.PI * 2); c.stroke();
       c.globalAlpha = 1;
     }
@@ -214,7 +251,9 @@ export class Renderer {
     // Thân
     c.fillStyle = p.hitFlash > 0 ? '#ffffff' : p.color;
     c.beginPath(); c.arc(p.x, p.y, PLAYER_R, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 2; c.stroke();
+    c.strokeStyle = p.id === me ? '#ffffff' : 'rgba(0,0,0,0.5)';
+    c.lineWidth = p.id === me ? 2.5 : 2;
+    c.stroke();
 
     if (!p.alive) {
       c.strokeStyle = '#fff'; c.lineWidth = 3;
@@ -225,18 +264,18 @@ export class Renderer {
     }
 
     // Vòng nạp đạn
-    if (p.reloading) {
-      const k = 1 - p.reloadT / p.def.reload;
+    if (p.alive && p.reloading) {
+      const k = Math.max(0, Math.min(1, 1 - p.reloadT / p.def.reload));
       c.strokeStyle = '#ffd166'; c.lineWidth = 3;
       c.beginPath(); c.arc(p.x, p.y, PLAYER_R + 6, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); c.stroke();
     }
 
     // Tên + thanh máu nhỏ
-    if (p.alive && world.phase !== 'matchEnd') {
+    if (p.alive && view.phase !== 'matchEnd') {
       c.font = `600 12px ${FONT}`;
       c.textAlign = 'center';
-      c.fillStyle = 'rgba(255,255,255,0.85)';
-      c.fillText(p.name, p.x, p.y - PLAYER_R - 16);
+      c.fillStyle = p.id === me ? '#ffffff' : 'rgba(255,255,255,0.8)';
+      c.fillText(p.id === me ? `▼ ${p.name}` : p.name, p.x, p.y - PLAYER_R - 16);
       c.fillStyle = 'rgba(0,0,0,0.6)';
       c.fillRect(p.x - 20, p.y - PLAYER_R - 11, 40, 5);
       c.fillStyle = p.hp > 30 ? '#06d6a0' : '#ef476f';
@@ -245,6 +284,9 @@ export class Renderer {
         c.fillStyle = PICKUPS.armor.color;
         c.fillRect(p.x - 20, p.y - PLAYER_R - 6, (40 * p.armor) / MAX_ARMOR, 2);
       }
+      // Vạch nhỏ dưới chân để phân biệt đội
+      c.fillStyle = TEAM_COLORS[p.team][0];
+      c.fillRect(p.x - 8, p.y + PLAYER_R + 4, 16, 2);
     }
     c.restore();
   }
@@ -267,42 +309,98 @@ export class Renderer {
     c.globalAlpha = 1;
   }
 
-  private drawHud(world: World) {
+  // ---------- HUD ----------
+  private drawHud(view: WorldView, opt: DrawOptions) {
     const c = this.ctx;
-    const [a, b] = world.players;
+    const t0 = view.players.filter((p) => p.team === 0), t1 = view.players.filter((p) => p.team === 1);
+    const solo = t0.length === 1 && t1.length === 1;
 
     // Bảng điểm trên cùng
     c.fillStyle = 'rgba(10,12,18,0.78)';
-    c.beginPath(); c.roundRect(W / 2 - 200, 26, 400, 62, 10); c.fill();
+    c.beginPath(); c.roundRect(W / 2 - 210, 26, 420, 62, 10); c.fill();
     c.textBaseline = 'middle';
     c.font = `800 30px ${FONT}`;
     c.textAlign = 'center';
-    c.fillStyle = a.color; c.fillText(String(world.score[0]), W / 2 - 34, 50);
+    c.fillStyle = TEAM_COLORS[0][0]; c.fillText(String(view.score[0]), W / 2 - 34, 50);
     c.fillStyle = '#6b7385'; c.fillText(':', W / 2, 48);
-    c.fillStyle = b.color; c.fillText(String(world.score[1]), W / 2 + 34, 50);
+    c.fillStyle = TEAM_COLORS[1][0]; c.fillText(String(view.score[1]), W / 2 + 34, 50);
     c.font = `600 14px ${FONT}`;
-    c.textAlign = 'right'; c.fillStyle = a.color; c.fillText(truncate(a.name, 16), W / 2 - 64, 50);
-    c.textAlign = 'left'; c.fillStyle = b.color; c.fillText(truncate(b.name, 16), W / 2 + 64, 50);
-    const t = Math.ceil(world.roundTime);
+    const left = solo ? t0[0].name : `${TEAM_NAMES[0]} ${t0.length}`;
+    const right = solo ? t1[0].name : `${t1.length} ${TEAM_NAMES[1]}`;
+    c.textAlign = 'right'; c.fillStyle = TEAM_COLORS[0][0]; c.fillText(truncate(left, 16), W / 2 - 64, 50);
+    c.textAlign = 'left'; c.fillStyle = TEAM_COLORS[1][0]; c.fillText(truncate(right, 16), W / 2 + 64, 50);
+    const t = Math.ceil(view.roundTime);
     c.textAlign = 'center';
     c.font = `500 12px ${FONT}`;
-    c.fillStyle = t <= 10 && world.phase === 'playing' ? '#ef476f' : '#9aa3b5';
-    c.fillText(`Round ${world.round}  ·  ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`, W / 2, 77);
+    c.fillStyle = t <= 10 && view.phase === 'playing' ? '#ef476f' : '#9aa3b5';
+    c.fillText(`Round ${view.round}  ·  ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`, W / 2, 77);
 
-    this.playerPanel(a, 36, H - 96);
-    this.playerPanel(b, W - 36 - 264, H - 96);
+    // Danh sách đội (chế độ nhiều người)
+    if (!solo) {
+      this.roster(t0, 28, 'left', opt.me);
+      this.roster(t1, W - 28, 'right', opt.me);
+    }
+    this.drawFeed(solo ? 104 : 30 + 22 * Math.max(t0.length, t1.length) + 12, opt.focus.length > 1);
+
+    // Bảng thông tin lớn: 1 người → góc trái; 2 người cùng máy → hai góc
+    const focus = opt.focus.map((id) => view.players[id]).filter(Boolean);
+    if (focus[0]) this.playerPanel(focus[0], 36, H - 96);
+    if (focus[1]) this.playerPanel(focus[1], W - 36 - 264, H - 96);
     c.textBaseline = 'alphabetic';
+  }
+
+  private roster(list: Player[], x: number, align: 'left' | 'right', me: number | null) {
+    const c = this.ctx;
+    const w = 168;
+    const bx = align === 'left' ? x : x - w;
+    list.forEach((p, i) => {
+      const y = 30 + i * 22;
+      c.globalAlpha = p.alive ? 1 : 0.45;
+      c.fillStyle = 'rgba(10,12,18,0.7)';
+      c.beginPath(); c.roundRect(bx, y, w, 19, 5); c.fill();
+      c.fillStyle = p.color;
+      c.beginPath(); c.arc(bx + 10, y + 9.5, 4, 0, Math.PI * 2); c.fill();
+      c.font = `${p.id === me ? 800 : 600} 11px ${FONT}`;
+      c.textAlign = 'left';
+      c.fillStyle = '#e6e9ef';
+      c.fillText(truncate(p.name, 11), bx + 19, y + 10);
+      c.fillStyle = '#2a3142'; c.fillRect(bx + 104, y + 7, 56, 5);
+      if (p.alive) { c.fillStyle = p.hp > 30 ? '#06d6a0' : '#ef476f'; c.fillRect(bx + 104, y + 7, (56 * p.hp) / MAX_HP, 5); }
+    });
+    c.globalAlpha = 1;
+  }
+
+  private drawFeed(top: number, twoPanels: boolean) {
+    const c = this.ctx;
+    c.font = `600 12px ${FONT}`;
+    c.textBaseline = 'middle';
+    this.feed.slice(0, twoPanels ? 3 : 5).forEach((k, i) => {
+      const y = top + i * 22;
+      const text = [k.killer, ` ✕ `, k.victim, `  ${k.weapon}`];
+      const widths = text.map((s) => c.measureText(s).width);
+      const total = widths.reduce((a, b) => a + b, 0) + 16;
+      let x = W - 28 - total;
+      c.globalAlpha = Math.min(1, k.t / 0.5);
+      c.fillStyle = 'rgba(10,12,18,0.72)';
+      c.beginPath(); c.roundRect(x, y - 9, total, 19, 5); c.fill();
+      x += 8;
+      const colors = [k.killerColor, '#9aa3b5', k.victimColor, '#6b7385'];
+      c.textAlign = 'left';
+      text.forEach((s, j) => { c.fillStyle = colors[j]; c.fillText(s, x, y + 1); x += widths[j]; });
+    });
+    c.globalAlpha = 1;
   }
 
   private playerPanel(p: Player, x: number, y: number) {
     const c = this.ctx;
     c.fillStyle = 'rgba(10,12,18,0.72)';
     c.beginPath(); c.roundRect(x, y, 264, 70, 10); c.fill();
+    c.textBaseline = 'alphabetic';
 
     c.font = `700 13px ${FONT}`;
-    c.textAlign = 'left'; c.fillStyle = p.color; c.fillText(truncate(p.name, 20), x + 12, y + 15);
+    c.textAlign = 'left'; c.fillStyle = p.color; c.fillText(truncate(p.name, 18), x + 12, y + 15);
     c.textAlign = 'right'; c.fillStyle = '#fff';
-    c.fillText(`${Math.ceil(p.hp)} HP${p.armor > 0 ? ` · ${Math.ceil(p.armor)} giáp` : ''}`, x + 252, y + 15);
+    c.fillText(p.alive ? `${Math.ceil(p.hp)} HP${p.armor > 0 ? ` · ${Math.ceil(p.armor)} giáp` : ''}` : 'Đã bị hạ', x + 252, y + 15);
 
     // Máu + giáp
     c.fillStyle = '#2a3142'; c.fillRect(x + 12, y + 26, 240, 10);
@@ -311,7 +409,7 @@ export class Renderer {
 
     // Buff đang có (hiện phía trên bảng)
     const buffs: [string, number, string][] = [];
-    if (p.damageBoostT > 0) buffs.push(['Sát thương x1.5', p.damageBoostT, PICKUPS.damage.color]);
+    if (p.damageBoostT > 0) buffs.push(['Sát thương x1.3', p.damageBoostT, PICKUPS.damage.color]);
     if (p.speedBoostT > 0) buffs.push(['Tốc độ', p.speedBoostT, PICKUPS.speed.color]);
     buffs.forEach(([label, t, col], i) => {
       const bx = x + i * 132, by = y - 24;
@@ -326,23 +424,23 @@ export class Renderer {
     c.fillStyle = '#2a3142'; c.fillRect(x + 12, y + 39, 240, 3);
     c.fillStyle = ready >= 1 ? '#ffd166' : '#7a6a3a'; c.fillRect(x + 12, y + 39, 240 * ready, 3);
 
-    // Súng + đạn
-    c.font = `600 12px ${FONT}`;
-    c.textAlign = 'left';
-    // Các ô số súng, ô đang cầm sáng lên
+    // Súng + đạn: các ô số súng, ô đang cầm sáng lên
     p.weapons.forEach((_, i) => {
       c.fillStyle = i === p.weapon ? '#ffffff' : '#3a4256';
       c.fillRect(x + 12 + i * 9, y + 50, 6, 6);
     });
     const def = p.def;
+    const nx = x + 12 + p.weapons.length * 9 + 6;
+    c.textAlign = 'left';
     c.fillStyle = '#fff';
     c.font = `700 13px ${FONT}`;
-    const nx = x + 12 + p.weapons.length * 9 + 6;
     c.fillText(def.name, nx, y + 58);
-    const nameW = c.measureText(def.name).width;
-    c.fillStyle = '#ffd166';
-    c.font = `600 11px ${FONT}`;
-    c.fillText('★'.repeat(def.level), nx + nameW + 6, y + 57);
+    if (def.modId !== 'standard') {
+      const nameW = c.measureText(def.name).width;
+      c.fillStyle = '#ffd166';
+      c.font = `600 11px ${FONT}`;
+      c.fillText(truncate(def.modName, 12), nx + nameW + 6, y + 57);
+    }
     c.textAlign = 'right';
     c.font = `700 13px ${FONT}`;
     c.fillStyle = p.reloading ? '#ffd166' : p.ammo[p.weapon] === 0 ? '#ef476f' : '#fff';

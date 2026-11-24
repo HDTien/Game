@@ -1,6 +1,6 @@
-# Đấu Súng 1vs1
+# Đấu Súng Online
 
-Game bắn súng top-down đối kháng 1vs1 chạy hoàn toàn trên trình duyệt. Không cần backend; dữ liệu lưu trong `localStorage`.
+Game bắn súng top-down đối kháng chạy hoàn toàn trên trình duyệt: **chơi online với bạn bè (1vs1, 2vs2, 3vs3)**, đấu Bot, hoặc 2 người chung 1 máy. Không cần backend.
 
 ## Chạy
 
@@ -12,41 +12,43 @@ npm run build    # xuất ra thư mục dist/ (web tĩnh)
 
 ## Tính năng
 
-- **Đấu với Bot** (Dễ / Thường / Khó) – bot biết tìm đường, né đạn, đón đầu, chọn súng theo khoảng cách
-- **2 người · 1 máy** – chung bàn phím
-- 5 súng: Pistol, SMG, Shotgun, Rifle, Sniper · nạp đạn · lướt (dash)
-- **Tiến trình** (khi đấu Bot): kiếm xu + XP, lên cấp, nâng cấp từng súng lên cấp 5 (cần xu + điều kiện: cấp người chơi, số lần hạ gục bằng súng đó), mở khóa Rifle/Sniper bằng thành tích, 9 thành tựu
-- **Vật phẩm trên bản đồ**: máu, giáp, sát thương x1.5, tốc độ, đầy đạn — xuất hiện theo cặp đối xứng
-- Âm thanh & nhạc nền tổng hợp bằng WebAudio (không cần file): tiếng súng riêng từng loại, âm thanh nổi trái/phải theo vị trí, âm vật phẩm, nhạc menu + nhạc chiến đấu, phím `M` tắt tiếng
-- 3 bản đồ đối xứng: Nhà kho, Mê cung, Cột trụ
-- Thắng 3 round để thắng trận, mỗi round 90 giây
-- Lưu hồ sơ, cài đặt, lịch sử 100 trận gần nhất, thống kê (K/D, tỉ lệ thắng, độ chính xác)
-- Xuất / nhập dữ liệu ra file JSON để sao lưu hoặc chuyển máy
+- **Online P2P** (WebRTC qua PeerJS): tạo phòng → gửi mã 5 ký tự / link mời → bạn bè vào phòng. Chọn 1vs1 / 2vs2 / 3vs3, đổi đội, thêm bot vào chỗ trống. Người rời giữa trận được bot thay thế.
+- **Đấu Bot** 1vs1 / 2vs2 / 3vs3 (đồng đội cũng là bot), 3 mức độ khó
+- **2 người · 1 máy**
+- 5 súng × 4 **chế độ súng** (Magnum, Bắn loạt, Giảm thanh, Đạn chì, Nòng cưa, Đạn nảy, Xuyên tường…). Mỗi chế độ là đánh đổi, không chế độ nào mạnh hơn tuyệt đối → công bằng khi chơi online
+- Vật phẩm trên bản đồ, xu, cấp độ, 10 thành tựu, lịch sử trận
+- Âm thanh & nhạc nền tổng hợp bằng WebAudio
+
+## Cách online hoạt động
+
+```
+Người chơi ──phím bấm (60/giây)──▶  CHỦ PHÒNG  ──trạng thái trận (30/giây)──▶ Người chơi
+                                   chạy World
+```
+
+- Máy chủ phòng chạy mô phỏng trận đấu và quyết định mọi thứ (chống gian lận cơ bản).
+- Người chơi tự **dự đoán** chuyển động của mình để không thấy trễ, và **nội suy** vị trí người khác cho mượt.
+- PeerJS chỉ dùng máy chủ công cộng miễn phí để "giới thiệu" 2 máy với nhau; dữ liệu trận đi thẳng giữa các máy.
+- Hạn chế: chủ phòng phải giữ tab mở; một số mạng (4G, mạng công ty) chặn P2P — cần thêm máy chủ TURN nếu muốn hỗ trợ.
 
 ## Cấu trúc
 
 ```
 src/
 ├── game/            # Logic thuần, không phụ thuộc DOM
-│   ├── constants.ts # thông số chung
-│   ├── weapons.ts   # bảng thông số súng
-│   ├── map.ts       # bản đồ
-│   ├── collision.ts # va chạm, tầm nhìn
-│   ├── world.ts     # mô phỏng trận đấu (tick cố định 60Hz, nhận input → sinh event)
-│   ├── nav.ts       # lưới tìm đường BFS cho bot
-│   └── bot.ts       # AI
-├── input.ts         # bàn phím / chuột → PlayerInput
-├── render.ts        # vẽ Canvas, hiệu ứng, HUD
-├── sound.ts         # âm thanh tổng hợp WebAudio
-├── storage.ts       # DataStore + LocalStore (localStorage)
-└── main.ts          # UI menu, vòng lặp game
+│   ├── world.ts     # mô phỏng trận (2 đội, tick 60Hz, input → event), moveStep dùng chung cho dự đoán
+│   ├── weapons.ts   # súng + chế độ súng
+│   ├── bot.ts, nav.ts, map.ts, collision.ts, pickups.ts, constants.ts
+├── net/
+│   ├── protocol.ts  # định dạng tin nhắn, nén input/snapshot
+│   ├── host.ts      # chủ phòng: sảnh chờ, hàng đợi input, phát snapshot
+│   └── client.ts    # người vào phòng: kết nối + ClientWorld (dự đoán & nội suy)
+├── progression.ts   # xu, cấp, chế độ súng, thành tựu
+├── armory.ts        # giao diện Kho vũ khí
+├── render.ts, input.ts, sound.ts, music.ts, storage.ts
+└── main.ts          # menu, phòng online, vòng lặp game
 ```
 
 ## Deploy miễn phí
 
-Build ra web tĩnh (`dist/`), có thể đưa lên **GitHub Pages**, **Netlify**, **Vercel** hoặc **Cloudflare Pages** mà không tốn phí.
-
-## Hướng phát triển
-
-- **Online 1vs1 không cần server riêng:** kết nối P2P bằng WebRTC (ví dụ PeerJS). `World` chỉ nhận input nên có thể đồng bộ bằng cách gửi input qua mạng.
-- **Có backend + MongoDB:** viết `ApiStore` implement `DataStore` trong `storage.ts`. Game và UI không phải sửa.
+Build ra web tĩnh (`dist/`) → GitHub Pages / Netlify / Vercel / Cloudflare Pages. Sau khi deploy, gửi link cho bạn bè là chơi online được.

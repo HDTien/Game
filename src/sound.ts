@@ -153,8 +153,14 @@ export class Sfx {
     notes.forEach((n, i) => this.tone(out, { freq: midi(n), dur, gain, type, at: i * step }));
   }
 
-  gunshot(id: WeaponId, x?: number) {
+  gunshot(id: WeaponId, x?: number, mod?: string) {
     if (!this.a.ctx) return;
+    if (mod === 'silencer') {
+      const out = this.out(x);
+      this.noise(out, { dur: 0.05, gain: 0.12, type: 'bandpass', f0: 1200, q: 2 });
+      this.tone(out, { freq: 300, to: 120, dur: 0.04, gain: 0.06 });
+      return;
+    }
     const g = GUNS[id];
     const out = this.out(x);
     const v = 1 + (Math.random() - 0.5) * 0.08; // lệch cao độ nhẹ để không bị lặp nhàm
@@ -212,7 +218,7 @@ export class Sfx {
     for (const e of events) {
       switch (e.type) {
         case 'shoot':
-          this.gunshot(e.weapon, e.x);
+          this.gunshot(e.weapon, e.x, e.mod);
           break;
         case 'hit': {
           const key = `${e.target}${e.armor}`;

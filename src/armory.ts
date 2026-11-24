@@ -1,19 +1,16 @@
-import { WEAPON_ORDER, MAX_LEVEL, UPGRADES, buildWeapon, type WeaponDef, type WeaponId } from './game/weapons';
-import {
-  ACHIEVEMENTS, UNLOCKS, nextUpgrade, reqMet, reqText, upgradeBlocker, xpToNext, type Progress,
-} from './progression';
+import { WEAPON_ORDER, MODS, MAX_BULLET_DAMAGE, buildWeapon, timeToKill, type WeaponDef, type WeaponId } from './game/weapons';
+import { ACHIEVEMENTS, modBlocker, xpToNext, type Progress } from './progression';
 
-/** Giao diện Kho vũ khí: danh sách súng bên trái, chi tiết + lộ trình nâng cấp bên phải. */
+/** Kho vũ khí: chọn chế độ cho từng súng. Mọi chế độ đều là đánh đổi, không chế độ nào mạnh hơn tuyệt đối. */
 
 export const WEAPON_ROLE: Record<WeaponId, string> = {
   pistol: 'Súng lục ổn định, chính xác ở mọi tầm. Băng đạn vừa, nạp nhanh.',
-  smg: 'Bắn cực nhanh, sát thương mỗi viên thấp, đạn tỏa. Mạnh ở tầm gần – trung.',
-  shotgun: 'Mỗi phát bắn ra nhiều viên. Cực mạnh khi áp sát, gần như vô dụng ở xa.',
-  rifle: 'Cân bằng: bắn nhanh, chính xác, tầm xa. Lựa chọn an toàn cho mọi tình huống.',
-  sniper: 'Một phát cực đau, bắn rất chậm. Trượt là trả giá — cần ngắm thật chuẩn.',
+  smg: 'Bắn cực nhanh, mỗi viên yếu, đạn tỏa. Mạnh ở tầm gần – trung.',
+  shotgun: 'Mỗi phát nhiều viên. Cực mạnh khi áp sát, gần như vô dụng ở xa.',
+  rifle: 'Cân bằng: bắn nhanh, chính xác, tầm xa. An toàn cho mọi tình huống.',
+  sniper: 'Phát bắn cực đau nhưng rất chậm. Trượt là trả giá — cần ngắm chuẩn.',
 };
 
-/** Hình súng đơn giản bằng SVG. */
 const SHAPES: Record<WeaponId, string> = {
   pistol: '<rect x="14" y="5" width="30" height="7" rx="1"/><polygon points="16,12 25,12 22,22 13,22"/><rect x="26" y="12" width="5" height="3"/>',
   smg: '<rect x="8" y="6" width="42" height="7" rx="1"/><rect x="50" y="8" width="8" height="3"/><rect x="28" y="13" width="6" height="10"/><polygon points="14,13 21,13 18,21 11,21"/><rect x="0" y="7" width="8" height="4"/>',
@@ -32,36 +29,32 @@ export function weaponIcon(id: WeaponId, cls = 'gun'): SVGSVGElement {
 }
 
 // ---------- Thanh chỉ số ----------
-interface StatDef {
-  label: string;
-  value: (w: WeaponDef) => number;
-  format: (w: WeaponDef) => string;
-  lowerIsBetter?: boolean;
-}
-
-const dps = (w: WeaponDef) => w.damage * w.pellets * w.fireRate;
+interface StatDef { label: string; value: (w: WeaponDef) => number; format: (w: WeaponDef) => string; lowerIsBetter?: boolean }
 
 const STATS: StatDef[] = [
-  { label: 'Sát thương / giây', value: dps, format: (w) => String(Math.round(dps(w))) },
-  { label: 'Sát thương / phát', value: (w) => w.damage * w.pellets, format: (w) => (w.pellets > 1 ? `${w.damage} × ${w.pellets}` : String(w.damage)) },
-  { label: 'Tốc độ bắn', value: (w) => w.fireRate, format: (w) => `${w.fireRate.toFixed(1)}/s` },
+  { label: 'Thời gian hạ gục', value: (w) => timeToKill(w), format: (w) => `${timeToKill(w).toFixed(2)}s`, lowerIsBetter: true },
+  {
+    label: 'Sát thương / phát', value: (w) => Math.min(w.damage, MAX_BULLET_DAMAGE) * w.pellets,
+    format: (w) => (w.pellets > 1 ? `${w.damage} × ${w.pellets}` : w.burst > 1 ? `${w.damage} × ${w.burst} loạt` : String(w.damage)),
+  },
+  { label: 'Tốc độ bắn', value: (w) => w.fireRate * w.burst, format: (w) => `${(w.fireRate * w.burst).toFixed(1)}/s` },
   { label: 'Băng đạn', value: (w) => w.mag, format: (w) => String(w.mag) },
-  { label: 'Nạp đạn', value: (w) => w.reload, format: (w) => `${w.reload.toFixed(2)}s`, lowerIsBetter: true },
+  { label: 'Nạp đạn', value: (w) => w.reload, format: (w) => `${w.reload.toFixed(1)}s`, lowerIsBetter: true },
+  { label: 'Độ chính xác', value: (w) => 1 / (w.spread + 0.02), format: (w) => (w.spread <= 0.02 ? 'Rất cao' : w.spread <= 0.06 ? 'Cao' : w.spread <= 0.15 ? 'Vừa' : 'Thấp') },
   { label: 'Tầm bắn', value: (w) => w.range, format: (w) => String(Math.round(w.range)) },
+  { label: 'Tốc chạy', value: (w) => w.moveMult, format: (w) => `${Math.round(w.moveMult * 100)}%` },
 ];
 
-/** Thang đo chung cho mọi súng để thanh có thể so sánh với nhau. */
 const SCALE = STATS.map((s) => {
-  const all = WEAPON_ORDER.flatMap((id) => [1, MAX_LEVEL].map((l) => s.value(buildWeapon(id, l))));
+  const all = WEAPON_ORDER.flatMap((id) => MODS[id].map((m) => s.value(buildWeapon(id, m.id))));
   return { min: Math.min(...all), max: Math.max(...all) };
 });
 
 function pct(i: number, w: WeaponDef): number {
   const s = STATS[i], { min, max } = SCALE[i];
   const v = s.value(w);
-  // Nạp đạn: càng nhanh thanh càng dài
-  const k = s.lowerIsBetter ? (max - v) / (max - min) : v / max;
-  return Math.max(4, Math.min(100, k * 100));
+  const k = s.lowerIsBetter ? (max - v) / (max - min) : (v - min * 0.6) / (max - min * 0.6);
+  return Math.max(5, Math.min(100, k * 100));
 }
 
 // ---------- DOM helpers ----------
@@ -70,12 +63,6 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): 
   if (cls) e.className = cls;
   if (text) e.textContent = text;
   return e;
-}
-
-function stars(level: number): HTMLElement {
-  const s = h('span', 'stars');
-  for (let i = 1; i <= MAX_LEVEL; i++) s.append(h('span', i <= level ? '' : 'off', '★'));
-  return s;
 }
 
 export function renderProfile(target: HTMLElement, p: Progress) {
@@ -95,11 +82,13 @@ export function renderProfile(target: HTMLElement, p: Progress) {
 // ---------- Kho vũ khí ----------
 export interface ArmoryHooks {
   getProgress: () => Progress;
-  onUpgrade: (id: WeaponId) => void;
+  onBuy: (id: WeaponId, modId: string) => void;
+  onSelect: (id: WeaponId, modId: string) => void;
 }
 
 export class Armory {
   private selected: WeaponId = 'pistol';
+  private preview: Partial<Record<WeaponId, string>> = {};
   private tab: 'weapons' | 'achievements' = 'weapons';
 
   constructor(private root: HTMLElement, private hooks: ArmoryHooks) {
@@ -113,12 +102,10 @@ export class Armory {
   render() {
     const p = this.hooks.getProgress();
     renderProfile(this.root.querySelector<HTMLElement>('#armory-profile')!, p);
-
     this.root.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === this.tab));
     this.root.querySelector('#tab-weapons')!.classList.toggle('hidden', this.tab !== 'weapons');
     this.root.querySelector('#tab-achievements')!.classList.toggle('hidden', this.tab !== 'achievements');
     this.root.querySelector('#ach-count')!.textContent = `${p.achievements.length}/${ACHIEVEMENTS.length}`;
-
     this.renderList(p);
     this.renderDetail(p);
     this.renderAchievements(p);
@@ -127,15 +114,16 @@ export class Armory {
   private renderList(p: Progress) {
     const list = this.root.querySelector('#weapon-list')!;
     list.replaceChildren(...WEAPON_ORDER.map((id) => {
-      const wp = p.weapons[id];
-      const tile = h('button', `wtile${id === this.selected ? ' selected' : ''}${wp.unlocked ? '' : ' locked'}`);
+      const mp = p.mods[id];
+      const tile = h('button', `wtile${id === this.selected ? ' selected' : ''}`);
       tile.type = 'button';
       tile.append(weaponIcon(id));
       const info = h('div', 'wtile-info');
-      info.append(h('div', 'wtile-name', buildWeapon(id).name));
-      info.append(wp.unlocked ? stars(wp.level) : h('span', 'wtile-lock', '🔒 Chưa mở khóa'));
+      const mod = MODS[id].find((m) => m.id === mp.selected)!;
+      info.append(h('div', 'wtile-name', buildWeapon(id).name), h('span', 'wtile-mod', mod.name));
       tile.append(info);
-      if (wp.unlocked && !upgradeBlocker(p, id)) tile.append(h('span', 'dot', ''));
+      const canBuy = MODS[id].some((m) => !mp.owned.includes(m.id) && !modBlocker(p, id, m));
+      if (canBuy) tile.append(h('span', 'dot', ''));
       tile.addEventListener('click', () => { this.selected = id; this.render(); });
       return tile;
     }));
@@ -143,111 +131,92 @@ export class Armory {
 
   private renderDetail(p: Progress) {
     const id = this.selected;
-    const wp = p.weapons[id];
-    const cur = buildWeapon(id, wp.level);
-    const next = wp.unlocked && wp.level < MAX_LEVEL ? buildWeapon(id, wp.level + 1) : null;
+    const mp = p.mods[id];
+    const previewId = this.preview[id] ?? mp.selected;
+    const equipped = buildWeapon(id, mp.selected);
+    const shown = buildWeapon(id, previewId);
     const box = this.root.querySelector('#weapon-detail')!;
     box.replaceChildren();
 
-    // Đầu trang: hình súng + tên + mô tả
     const head = h('div', 'wd-head');
     head.append(weaponIcon(id, 'gun big'));
     const title = h('div');
-    const nameRow = h('div', 'wd-name');
-    nameRow.append(h('span', '', cur.name), wp.unlocked ? stars(wp.level) : h('span', 'badge', '🔒 Khóa'));
-    title.append(nameRow, h('p', 'wd-role', WEAPON_ROLE[id]));
-    if (wp.unlocked) title.append(h('div', 'wd-kills', `Đã hạ gục ${wp.kills} đối thủ bằng súng này`));
+    title.append(h('div', 'wd-name', shown.name), h('p', 'wd-role', WEAPON_ROLE[id]));
     head.append(title);
     box.append(head);
 
-    // Thanh chỉ số (vạch xanh = phần tăng thêm ở cấp sau)
+    // Thanh chỉ số của chế độ đang xem, so với chế độ đang dùng
+    const comparing = previewId !== mp.selected;
+    box.append(h('div', 'wd-section', comparing ? `So sánh: ${equipped.modName} → ${shown.modName}` : `Chỉ số · ${shown.modName}`));
     const stats = h('div', 'wd-stats');
     STATS.forEach((s, i) => {
       const row = h('div', 'stat-row');
-      const label = h('span', 'stat-label', s.label);
       const bar = h('div', 'stat-bar');
+      const a = pct(i, equipped), b = pct(i, shown);
       const fill = h('i');
-      fill.style.width = `${pct(i, cur)}%`;
+      fill.style.width = `${Math.min(a, b)}%`;
       bar.append(fill);
-      let valueText = s.format(cur);
-      let up = false;
-      if (next) {
-        const a = s.format(cur), b = s.format(next);
-        if (a !== b) {
-          up = true;
-          const gain = h('b');
-          gain.style.left = `${pct(i, cur)}%`;
-          gain.style.width = `${Math.max(1.5, pct(i, next) - pct(i, cur))}%`;
-          bar.append(gain);
-          valueText = `${a} → ${b}`;
-        }
+      if (b > a + 0.5) {
+        const g = h('b', 'gain'); g.style.left = `${a}%`; g.style.width = `${b - a}%`; bar.append(g);
+      } else if (a > b + 0.5) {
+        const l = h('b', 'loss'); l.style.left = `${b}%`; l.style.width = `${a - b}%`; bar.append(l);
       }
-      row.append(label, bar, h('span', `stat-val${up ? ' up' : ''}`, valueText));
+      const fa = s.format(equipped), fb = s.format(shown);
+      const cls = fa === fb ? '' : b > a ? ' up' : ' down';
+      row.append(h('span', 'stat-label', s.label), bar, h('span', `stat-val${cls}`, fa === fb ? fb : `${fa} → ${fb}`));
       stats.append(row);
     });
-    if (cur.lifesteal > 0) {
-      const row = h('div', 'stat-row');
-      row.append(h('span', 'stat-label', 'Hút máu'), h('div'), h('span', 'stat-val', `${Math.round(cur.lifesteal * 100)}%`));
-      stats.append(row);
-    }
     box.append(stats);
 
-    // Chưa mở khóa
-    if (!wp.unlocked) {
-      const u = UNLOCKS[id]!;
-      const v = Math.min(u.current(p), u.target);
-      const lock = h('div', 'wd-unlock');
-      lock.append(h('div', 'wd-section', 'Điều kiện mở khóa'), h('div', 'wd-unlock-text', u.desc));
-      const bar = h('div', 'progressbar');
-      const fill = h('i');
-      fill.style.width = `${(v / u.target) * 100}%`;
-      bar.append(fill);
-      lock.append(bar, h('div', 'req', `Tiến độ ${v}/${u.target}`));
-      box.append(lock);
-      return;
-    }
+    const specials: string[] = [];
+    if (shown.bounces) specials.push(`Đạn nảy ${shown.bounces} lần`);
+    if (shown.pierce) specials.push(`Xuyên ${shown.pierce} tường`);
+    if (shown.tracer === 'faint') specials.push('Vệt đạn mờ, tiếng nhỏ');
+    if (specials.length) box.append(h('div', 'wd-special', `✦ ${specials.join(' · ')}`));
 
-    // Lộ trình nâng cấp
-    box.append(h('div', 'wd-section', 'Lộ trình nâng cấp'));
-    const path = h('ol', 'upath');
-    UPGRADES[id].forEach((u, i) => {
-      const lvl = i + 2;
-      const state = lvl <= wp.level ? 'done' : lvl === wp.level + 1 ? 'next' : 'future';
-      const li = h('li', `ustep ${state}`);
-      const mark = h('span', 'umark', state === 'done' ? '✓' : String(lvl));
-      const body = h('div', 'ubody');
-      const top = h('div', 'utop');
-      top.append(h('span', 'ulvl', `Cấp ${lvl}`), h('span', 'ucost', state === 'done' ? 'Đã có' : `${u.cost} xu`));
-      body.append(top, h('div', 'udesc', u.desc));
-      if (state !== 'done' && u.req.length) {
-        const reqs = h('div', 'ureqs');
-        for (const r of u.req) {
-          const ok = reqMet(p, id, r);
-          reqs.append(h('span', `chip ${ok ? 'ok' : 'no'}`, `${ok ? '✓' : '✗'} ${reqText(p, id, r)}`));
-        }
-        body.append(reqs);
+    // Các chế độ
+    box.append(h('div', 'wd-section', 'Chế độ súng'));
+    const grid = h('div', 'mod-grid');
+    for (const mod of MODS[id]) {
+      const owned = mp.owned.includes(mod.id);
+      const active = mp.selected === mod.id;
+      const card = h('div', `mod-card${active ? ' active' : ''}${mod.id === previewId ? ' previewing' : ''}${owned ? '' : ' locked'}`);
+      card.tabIndex = 0;
+      const top = h('div', 'mod-top');
+      top.append(h('span', 'mod-name', mod.name), h('span', 'mod-tag', active ? 'Đang dùng' : owned ? 'Đã có' : `${mod.cost} xu`));
+      card.append(top, h('div', 'mod-desc', mod.desc));
+      if (mod.pros.length || mod.cons.length) {
+        const pc = h('div', 'mod-pc');
+        for (const x of mod.pros) pc.append(h('span', 'pro', `+ ${x}`));
+        for (const x of mod.cons) pc.append(h('span', 'con', `− ${x}`));
+        card.append(pc);
       }
-      li.append(mark, body);
-      path.append(li);
-    });
-    box.append(path);
+      const previewThis = () => { this.preview[id] = mod.id; this.render(); };
+      card.addEventListener('click', previewThis);
+      card.addEventListener('keydown', (e) => { if (e.key === 'Enter') previewThis(); });
 
-    // Nút nâng cấp
-    const up = nextUpgrade(p, id);
-    const blocker = upgradeBlocker(p, id);
-    const btn = h('button', `upgrade-btn${blocker ? '' : ' primary'}`);
-    btn.type = 'button';
-    if (!up) {
-      btn.textContent = '✨ Đã đạt cấp tối đa';
-      btn.disabled = true;
-    } else if (blocker) {
-      btn.textContent = blocker === 'Không đủ xu' ? `Thiếu ${up.cost - p.coins} xu` : blocker;
-      btn.disabled = true;
-    } else {
-      btn.textContent = `Nâng lên cấp ${wp.level + 1} · ${up.cost} xu`;
-      btn.addEventListener('click', () => this.hooks.onUpgrade(id));
+      const btn = h('button', 'mod-btn');
+      btn.type = 'button';
+      if (active) {
+        btn.textContent = '✓ Đang dùng';
+        btn.disabled = true;
+      } else if (owned) {
+        btn.textContent = 'Dùng chế độ này';
+        btn.classList.add('primary');
+        btn.addEventListener('click', (e) => { e.stopPropagation(); this.preview[id] = mod.id; this.hooks.onSelect(id, mod.id); });
+      } else {
+        const blocker = modBlocker(p, id, mod);
+        btn.textContent = blocker ?? `Mở khóa · ${mod.cost} xu`;
+        btn.disabled = !!blocker;
+        if (!blocker) {
+          btn.classList.add('primary');
+          btn.addEventListener('click', (e) => { e.stopPropagation(); this.preview[id] = mod.id; this.hooks.onBuy(id, mod.id); });
+        }
+      }
+      card.append(btn);
+      grid.append(card);
     }
-    box.append(btn);
+    box.append(grid);
   }
 
   private renderAchievements(p: Progress) {

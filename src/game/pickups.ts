@@ -5,7 +5,7 @@ export interface PickupInfo { label: string; symbol: string; color: string; weig
 export const PICKUPS: Record<PickupKind, PickupInfo> = {
   health: { label: '+40 Máu',        symbol: '+', color: '#06d6a0', weight: 3 },
   armor:  { label: '+50 Giáp',       symbol: '◆', color: '#4895ef', weight: 2 },
-  damage: { label: 'Sát thương x1.5', symbol: '!', color: '#ff6b35', weight: 2 },
+  damage: { label: 'Sát thương x1.3', symbol: '!', color: '#ff6b35', weight: 2 },
   speed:  { label: 'Tốc độ +35%',    symbol: '»', color: '#ffd166', weight: 2 },
   ammo:   { label: 'Đầy đạn + lướt',  symbol: '≡', color: '#c77dff', weight: 1 },
 };
@@ -18,7 +18,7 @@ export const HEAL_AMOUNT = 40;
 export const ARMOR_AMOUNT = 50;
 export const MAX_ARMOR = 50;
 export const BOOST_TIME = 8;
-export const DAMAGE_MULT = 1.5;
+export const DAMAGE_MULT = 1.3;
 export const SPEED_MULT = 1.35;
 
 export function randomPickupKind(): PickupKind {

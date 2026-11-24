@@ -17,4 +17,11 @@ export const ROUND_TIME = 90;
 export const COUNTDOWN = 3;
 export const ROUND_END_DELAY = 2.5;
 
-export const PLAYER_COLORS: [string, string] = ['#4cc9f0', '#f72585'];
+export type Team = 0 | 1;
+/** Mỗi đội 3 sắc độ cho 3 người chơi. */
+export const TEAM_COLORS: [string[], string[]] = [
+  ['#4cc9f0', '#4895ef', '#72efdd'],
+  ['#f72585', '#ff6b6b', '#ff9e00'],
+];
+export const TEAM_NAMES: [string, string] = ['Đội Xanh', 'Đội Đỏ'];
+export const MAX_TEAM_SIZE = 3;

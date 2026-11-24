@@ -2,8 +2,8 @@ import { W, H } from './constants';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface Point { x: number; y: number }
-/** pickupGroups: mỗi nhóm là 1 điểm giữa map hoặc 1 cặp điểm đối xứng → vật phẩm luôn công bằng. */
-export interface GameMap { id: string; name: string; walls: Rect[]; spawns: [Point, Point]; pickupGroups: Point[][] }
+/** spawns: 3 điểm xuất phát cho mỗi đội (đối xứng). pickupGroups: mỗi nhóm là 1 điểm giữa map hoặc 1 cặp điểm đối xứng → vật phẩm luôn công bằng. */
+export interface GameMap { id: string; name: string; walls: Rect[]; spawns: [Point[], Point[]]; pickupGroups: Point[][] }
 
 const T = 20;
 const border = (): Rect[] => [
@@ -15,6 +15,9 @@ const border = (): Rect[] => [
 
 /** Đối xứng tâm để 2 bên công bằng tuyệt đối. */
 const pair = (x: number, y: number): Point[] => [{ x, y }, { x: W - x, y: H - y }];
+
+/** 3 điểm xuất phát của đội 0, đội 1 lấy đối xứng tâm. */
+const teamSpawns = (pts: Point[]): [Point[], Point[]] => [pts, pts.map((p) => ({ x: W - p.x, y: H - p.y }))];
 
 const mirror = (rs: Rect[]): Rect[] =>
   rs.flatMap((r) => [r, { x: W - r.x - r.w, y: H - r.y - r.h, w: r.w, h: r.h }]);
@@ -34,7 +37,7 @@ export const MAPS: GameMap[] = [
       ]),
       { x: 610, y: 310, w: 60, h: 100 },
     ],
-    spawns: [{ x: 80, y: 360 }, { x: W - 80, y: 360 }],
+    spawns: teamSpawns([{ x: 80, y: 360 }, { x: 80, y: 280 }, { x: 80, y: 440 }]),
     pickupGroups: [pair(640, 255), pair(300, 600), pair(120, 120)],
   },
   {
@@ -51,7 +54,7 @@ export const MAPS: GameMap[] = [
       ]),
       { x: 560, y: 340, w: 160, h: 40 },
     ],
-    spawns: [{ x: 80, y: 80 }, { x: W - 80, y: H - 80 }],
+    spawns: teamSpawns([{ x: 80, y: 80 }, { x: 80, y: 160 }, { x: 140, y: 120 }]),
     pickupGroups: [pair(640, 290), pair(420, 120), pair(100, 640)],
   },
   {
@@ -66,7 +69,7 @@ export const MAPS: GameMap[] = [
         { x: 610, y: 150, w: 60, h: 60 },
       ]),
     ],
-    spawns: [{ x: 80, y: 360 }, { x: W - 80, y: 360 }],
+    spawns: teamSpawns([{ x: 80, y: 360 }, { x: 80, y: 280 }, { x: 80, y: 440 }]),
     pickupGroups: [[{ x: 640, y: 360 }], pair(310, 360), pair(640, 80)],
   },
 ];

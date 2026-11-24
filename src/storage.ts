@@ -7,7 +7,8 @@ import { defaultProgress, normalizeProgress, type Progress } from './progression
  * mà không phải sửa game/UI.
  */
 
-export type Mode = 'bot' | 'local';
+export type Mode = 'bot' | 'local' | 'online';
+export type TeamSizeSetting = 1 | 2 | 3;
 
 export interface MatchPlayerRecord {
   name: string; score: number;
@@ -21,6 +22,8 @@ export interface MatchRecord {
   difficulty?: Difficulty;
   mapId: string;
   mapName: string;
+  teamSize?: number;
+  /** [bên mình, bên đối thủ] — chế độ đội thì cộng dồn chỉ số của cả đội đối thủ */
   players: [MatchPlayerRecord, MatchPlayerRecord];
   winner: 0 | 1 | null;
   rounds: number;
@@ -31,6 +34,7 @@ export interface Settings {
   mode: Mode;
   difficulty: Difficulty;
   mapId: string;
+  teamSize: TeamSizeSetting;
   p2Name: string;
   volume: number; // hiệu ứng 0..1
   musicVolume: number; // nhạc 0..1
@@ -67,7 +71,7 @@ export function defaults(): SaveData {
   return {
     version: 1,
     profile: { name: 'Người chơi 1' },
-    settings: { mode: 'bot', difficulty: 'normal', mapId: 'warehouse', p2Name: 'Người chơi 2', volume: 0.5, musicVolume: 0.35, screenShake: true },
+    settings: { mode: 'bot', difficulty: 'normal', mapId: 'warehouse', teamSize: 1, p2Name: 'Người chơi 2', volume: 0.5, musicVolume: 0.35, screenShake: true },
     stats: { matches: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, shots: 0, hits: 0, damage: 0 },
     history: [],
     progress: defaultProgress(),

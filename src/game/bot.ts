@@ -2,7 +2,10 @@ import { TICK, PLAYER_R } from './constants';
 import { angleDiff, clamp, lineOfSight, segmentRect } from './collision';
 import { NavGrid } from './nav';
 import { MAX_ARMOR } from './pickups';
-import { NO_INPUT, type PlayerInput, type Player, type Side, type World } from './world';
+import { NO_INPUT, type PlayerInput, type Player, type World } from './world';
+import type { GameMap } from './map';
+
+const navCache = new Map<GameMap, NavGrid>();
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -28,14 +31,27 @@ export class Bot {
   private fieldT = 0;
   private fieldKey = '';
 
-  constructor(public readonly id: Side, public readonly difficulty: Difficulty) {}
+  private targetId = -1;
+
+  constructor(public readonly id: number, public readonly difficulty: Difficulty) {}
 
   think(world: World): PlayerInput {
     const dt = TICK;
     const P = PARAMS[this.difficulty];
-    const me = world.players[this.id], en = world.players[1 - this.id];
-    const nav = (this.nav ??= new NavGrid(world.map));
+    const me = world.players[this.id];
+    const en = this.pickTarget(me, world);
+    if (!en || !me.alive) return { ...NO_INPUT, aim: this.aim };
+    if (!this.nav) {
+      this.nav = navCache.get(world.map) ?? new NavGrid(world.map);
+      navCache.set(world.map, this.nav);
+    }
+    const nav = this.nav;
     this.t += dt;
+    if (en.id !== this.targetId) {
+      this.targetId = en.id;
+      this.prevEnemy = { x: en.x, y: en.y };
+      this.seenT = 0;
+    }
 
     if (world.roundId !== this.roundId) {
       this.roundId = world.roundId;
@@ -56,7 +72,9 @@ export class Bot {
 
     // Chọn súng theo khoảng cách
     this.switchCd -= dt;
-    const want = me.weapons.findIndex((w) => w.id === (dist < 230 ? 'shotgun' : dist < 520 ? 'smg' : 'pistol'));
+    const pref = dist < 220 ? ['shotgun', 'smg'] : dist < 450 ? ['smg', 'rifle'] : ['rifle', 'pistol'];
+    let want = -1;
+    for (const id of pref) { want = me.weapons.findIndex((w) => w.id === id); if (want >= 0) break; }
     if (want >= 0 && want !== me.weapon && this.switchCd <= 0 && me.fireCd <= 0.05) {
       inp.weapon = want;
       this.switchCd = 1.5;
@@ -106,6 +124,19 @@ export class Bot {
       if (los && me.dashCd <= 0 && Math.random() < P.dashChance) inp.dash = true;
     }
     return inp;
+  }
+
+  /** Kẻ địch gần nhất, ưu tiên kẻ đang nhìn thấy; giữ mục tiêu cũ nếu vẫn còn thấy. */
+  private pickTarget(me: Player, world: World): Player | null {
+    let best: Player | null = null, bestScore = Infinity;
+    for (const p of world.players) {
+      if (!p.alive || p.team === me.team) continue;
+      const d = Math.hypot(p.x - me.x, p.y - me.y);
+      const visible = lineOfSight(me.x, me.y, p.x, p.y, world.map.walls);
+      const score = d + (visible ? 0 : 600) - (p.id === this.targetId ? 120 : 0);
+      if (score < bestScore) { bestScore = score; best = p; }
+    }
+    return best;
   }
 
   private pickGoal(me: Player, world: World): { x: number; y: number } | null {

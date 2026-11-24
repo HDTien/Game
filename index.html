@@ -3,29 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Đấu Súng 1vs1</title>
+    <title>Đấu Súng Online</title>
   </head>
   <body>
     <div id="stage" class="hidden">
       <canvas id="game"></canvas>
+      <div id="net-status" class="net-status hidden"></div>
     </div>
 
     <!-- MENU -->
     <section id="menu" class="screen">
       <div class="card">
-        <h1>Đấu Súng <span>1vs1</span></h1>
-        <p class="muted">Bắn súng top-down · Thắng 3 round để thắng trận</p>
+        <h1>Đấu Súng <span>Online</span></h1>
+        <p class="muted">Bắn súng top-down · 1vs1 · 2vs2 · 3vs3 · Thắng 3 round để thắng trận</p>
         <div id="profile-bar" class="profile"></div>
 
         <label>Tên của bạn
           <input id="name" maxlength="20" autocomplete="off" />
         </label>
 
+        <button id="btn-online" class="online-btn">
+          <span class="big">🌐 Chơi online với bạn bè</span>
+          <span class="sub">Tạo phòng hoặc nhập mã phòng · 1vs1, 2vs2, 3vs3</span>
+        </button>
+
+        <div class="divider"><span>hoặc chơi trên máy này</span></div>
+
         <div class="row">
           <label>Chế độ
             <select id="mode">
               <option value="bot">Đấu với Bot</option>
               <option value="local">2 người · 1 máy</option>
+            </select>
+          </label>
+          <label id="teamsize-wrap">Số người mỗi đội
+            <select id="teamsize">
+              <option value="1">1 vs 1</option>
+              <option value="2">2 vs 2 (bạn + 1 bot)</option>
+              <option value="3">3 vs 3 (bạn + 2 bot)</option>
             </select>
           </label>
           <label id="difficulty-wrap">Độ khó
@@ -61,10 +76,92 @@
       </div>
     </section>
 
+    <!-- ONLINE -->
+    <section id="online" class="screen hidden">
+      <div class="card online">
+        <!-- Bước 1: tạo / vào phòng -->
+        <div id="online-entry">
+          <div class="armory-top">
+            <h2>Chơi online</h2>
+            <button id="btn-online-back" class="back-btn">← Về menu</button>
+          </div>
+          <div class="entry-grid">
+            <div class="entry-box">
+              <h3>Tạo phòng</h3>
+              <p class="muted small">Bạn làm chủ phòng, gửi mã phòng hoặc link mời cho bạn bè.</p>
+              <button id="btn-create" class="primary">Tạo phòng mới</button>
+            </div>
+            <div class="entry-box">
+              <h3>Vào phòng</h3>
+              <p class="muted small">Nhập mã 5 ký tự bạn bè gửi cho bạn.</p>
+              <div class="join-row">
+                <input id="room-code" maxlength="5" placeholder="VD: K7M2Q" autocomplete="off" spellcheck="false" />
+                <button id="btn-join" class="primary">Vào</button>
+              </div>
+            </div>
+          </div>
+          <p id="online-status" class="status"></p>
+          <p class="muted small">
+            Kết nối trực tiếp giữa các máy (P2P), không cần máy chủ riêng. Chủ phòng nên dùng mạng ổn định và
+            <b>giữ tab game mở</b> trong lúc chơi. Một số mạng 4G / mạng công ty có thể chặn kết nối P2P.
+          </p>
+        </div>
+
+        <!-- Bước 2: sảnh chờ -->
+        <div id="online-lobby" class="hidden">
+          <div class="lobby-head">
+            <div>
+              <div class="muted small">Mã phòng</div>
+              <div class="room-code" id="lobby-code"></div>
+            </div>
+            <div class="lobby-actions">
+              <button id="btn-copy-link">📋 Sao chép link mời</button>
+              <button id="btn-leave" class="ghost">Rời phòng</button>
+            </div>
+          </div>
+
+          <div class="row lobby-settings">
+            <label>Chế độ
+              <select id="lobby-size">
+                <option value="1">1 vs 1</option>
+                <option value="2">2 vs 2</option>
+                <option value="3">3 vs 3</option>
+              </select>
+            </label>
+            <label>Bản đồ
+              <select id="lobby-map"></select>
+            </label>
+            <label>Bot
+              <select id="lobby-bot">
+                <option value="easy">Dễ</option>
+                <option value="normal">Thường</option>
+                <option value="hard">Khó</option>
+              </select>
+            </label>
+            <label class="inline fill-bots"><input id="lobby-fill" type="checkbox" /> Tự thêm bot vào chỗ trống</label>
+          </div>
+
+          <div class="teams">
+            <div class="team team-0"><div class="team-title">Đội Xanh <span id="team0-count"></span></div><div id="team0"></div></div>
+            <div class="team team-1"><div class="team-title">Đội Đỏ <span id="team1-count"></span></div><div id="team1"></div></div>
+          </div>
+
+          <p id="lobby-status" class="status"></p>
+          <div class="buttons">
+            <button id="btn-lobby-start" class="primary">Bắt đầu trận</button>
+            <button id="btn-switch-team">⇄ Đổi đội</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- LỊCH SỬ -->
     <section id="history" class="screen hidden">
       <div class="card wide">
-        <h2>Lịch sử &amp; thống kê</h2>
+        <div class="armory-top">
+          <h2>Lịch sử &amp; thống kê</h2>
+          <button id="btn-history-top" class="back-btn">← Về menu</button>
+        </div>
         <div id="stats-summary" class="stats"></div>
         <div class="table-wrap">
           <table>
@@ -86,30 +183,46 @@
 
     <!-- KHO VŨ KHÍ -->
     <section id="armory" class="screen hidden">
-      <div class="card wide">
-        <div class="armory-head">
-          <h2>Kho vũ khí</h2>
-          <div id="armory-profile" class="profile"></div>
+      <div class="card armory">
+        <div class="sticky-head">
+          <header class="armory-top">
+            <div>
+              <h2>Kho vũ khí</h2>
+              <div id="armory-profile" class="profile"></div>
+            </div>
+            <button id="btn-armory-back" class="back-btn">← Về menu</button>
+          </header>
+          <nav class="tabs">
+            <button type="button" data-tab="weapons">Chế độ súng</button>
+            <button type="button" data-tab="achievements">Thành tựu <span id="ach-count" class="count"></span></button>
+          </nav>
         </div>
-        <p class="muted">Đấu với Bot để kiếm <b>xu</b> và <b>kinh nghiệm</b>. Nâng cấp súng cần đủ xu và đạt điều kiện; súng mới mở khóa bằng thành tích.</p>
-        <div id="weapon-list" class="weapon-grid"></div>
-        <h3>Thành tựu</h3>
-        <div id="achievement-list" class="ach-grid"></div>
-        <div class="buttons">
-          <button id="btn-armory-back" class="primary">Quay lại</button>
+        <div id="tab-weapons" class="armory-body">
+          <div id="weapon-list" class="weapon-list"></div>
+          <div id="weapon-detail" class="weapon-detail"></div>
         </div>
+        <div id="tab-achievements" class="hidden">
+          <p class="muted small">Hoàn thành thành tựu để nhận thêm xu.</p>
+          <div id="achievement-list" class="ach-grid"></div>
+        </div>
+        <p class="muted small foot">
+          Mỗi chế độ súng là một kiểu chơi khác — được cái này thì mất cái kia, không chế độ nào mạnh hơn tuyệt đối.
+          Chế độ bạn chọn được dùng cả khi chơi online.
+        </p>
       </div>
     </section>
 
     <!-- KẾT QUẢ -->
     <section id="result" class="screen hidden overlay">
-      <div class="card">
+      <div class="card result">
         <h2 id="result-title"></h2>
         <p id="result-score" class="score"></p>
-        <table>
-          <thead><tr><th></th><th id="result-p0"></th><th id="result-p1"></th></tr></thead>
-          <tbody id="result-body"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Người chơi</th><th>Hạ gục</th><th>Bị hạ</th><th>Sát thương</th><th>Chính xác</th></tr></thead>
+            <tbody id="result-body"></tbody>
+          </table>
+        </div>
         <div id="result-rewards" class="rewards"></div>
         <div class="buttons">
           <button id="btn-rematch" class="primary">Chơi lại</button>
@@ -118,10 +231,11 @@
       </div>
     </section>
 
-    <!-- TẠM DỪNG -->
+    <!-- TẠM DỪNG / MENU TRONG TRẬN -->
     <section id="pause" class="screen hidden overlay">
       <div class="card narrow">
-        <h2>Tạm dừng</h2>
+        <h2 id="pause-title">Tạm dừng</h2>
+        <p id="pause-note" class="muted small hidden">Trận online vẫn đang diễn ra!</p>
         <div class="buttons column">
           <button id="btn-resume" class="primary">Tiếp tục (Esc)</button>
           <button id="btn-quit">Bỏ trận, về menu</button>
@@ -130,6 +244,7 @@
     </section>
 
     <div id="mute" class="mute hidden">🔇 Đã tắt tiếng — nhấn M để bật</div>
+    <div id="toast" class="toast hidden"></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
